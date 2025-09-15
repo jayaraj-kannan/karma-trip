@@ -8,7 +8,7 @@ const Index = () => {
   return (
     <div className="min-h-screen">
       {currentView === 'planner' ? (
-        <TripPlannerHero />
+        <TripPlannerHero onPlanGenerated={() => setCurrentView('itinerary')} />
       ) : (
         <ItineraryDisplay />
       )}

@@ -1,9 +1,88 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Calendar, MapPin, Users, Sparkles } from "lucide-react";
+import { Calendar, Users, Sparkles, MapPin } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import DestinationSearch from "@/components/DestinationSearch";
+import AIDateSuggestions from "@/components/AIDateSuggestions";
+import { useTripPlanner } from "@/contexts/TripPlannerContext";
+import { useToast } from "@/hooks/use-toast";
+import { Destination } from "@/lib/mockDb";
 
-const TripPlannerHero = () => {
+interface TripPlannerHeroProps {
+  onPlanGenerated: () => void;
+}
+
+const TripPlannerHero: React.FC<TripPlannerHeroProps> = ({ onPlanGenerated }) => {
+  const [selectedDestination, setSelectedDestination] = useState<Destination | null>(null);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [travelers, setTravelers] = useState(1);
+  const [budget, setBudget] = useState(5000);
+  const [selectedMood, setSelectedMood] = useState('');
+  
+  const { generateItinerary, isLoading } = useTripPlanner();
+  const { toast } = useToast();
+
+  const handleDateSelection = (start: string, end: string) => {
+    setStartDate(start);
+    setEndDate(end);
+  };
+
+  const handleMoodSelect = (mood: string) => {
+    setSelectedMood(mood);
+  };
+
+  const calculateDays = () => {
+    if (!startDate || !endDate) return 3;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  };
+
+  const handleCreateTrip = async () => {
+    if (!selectedDestination) {
+      toast({
+        title: "Select Destination",
+        description: "Please select a destination to create your trip.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!selectedMood) {
+      toast({
+        title: "Choose Your Mood",
+        description: "Please select your travel mood to get personalized recommendations.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const days = calculateDays();
+      await generateItinerary({
+        destination: selectedDestination.name,
+        days,
+        budget,
+        mood: selectedMood,
+        travelers
+      });
+      
+      toast({
+        title: "Trip Created! 🎉",
+        description: `Your ${days}-day ${selectedMood} adventure in ${selectedDestination.name} is ready!`,
+      });
+      
+      onPlanGenerated();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create your trip. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
   return (
     <div className="min-h-screen travel-gradient relative overflow-hidden">
       {/* Animated background elements */}
@@ -30,90 +109,143 @@ const TripPlannerHero = () => {
 
         {/* Main Planning Interface */}
         <Card className="max-w-4xl mx-auto p-8 shadow-elevated bg-white/95 backdrop-blur-sm border-0">
-          <div className="grid md:grid-cols-2 gap-8">
-            {/* Destination Input */}
-            <div className="space-y-4">
-              <label className="text-lg font-semibold text-foreground flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-primary" />
-                Where to?
+          <div className="space-y-8">
+            {/* Destination Selection */}
+            <div>
+              <label className="text-lg font-semibold text-foreground flex items-center gap-2 mb-4">
+                <Sparkles className="w-5 h-5 text-primary" />
+                Where would you like to go?
               </label>
-              <Input 
-                placeholder="Search destinations..." 
-                className="h-12 text-lg shadow-soft border-border/50 focus:border-primary"
+              <DestinationSearch 
+                onDestinationSelect={setSelectedDestination}
+                selectedDestination={selectedDestination}
               />
             </div>
 
-            {/* Travel Dates */}
-            <div className="space-y-4">
-              <label className="text-lg font-semibold text-foreground flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-primary" />
-                When?
-              </label>
-              <div className="flex gap-2">
+            {/* AI Date Suggestions */}
+            {selectedDestination && (
+              <div>
+                <label className="text-lg font-semibold text-foreground flex items-center gap-2 mb-4">
+                  <Calendar className="w-5 h-5 text-primary" />
+                  When do you want to travel?
+                </label>
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <AIDateSuggestions 
+                      destination={selectedDestination.name}
+                      onDateSelect={handleDateSelection}
+                    />
+                  </div>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground mb-1 block">
+                          Start Date
+                        </label>
+                        <Input 
+                          type="date" 
+                          value={startDate}
+                          onChange={(e) => setStartDate(e.target.value)}
+                          className="h-11 shadow-soft border-border/50 focus:border-primary"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-muted-foreground mb-1 block">
+                          End Date
+                        </label>
+                        <Input 
+                          type="date" 
+                          value={endDate}
+                          onChange={(e) => setEndDate(e.target.value)}
+                          className="h-11 shadow-soft border-border/50 focus:border-primary"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Trip Details */}
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Travelers */}
+              <div>
+                <label className="text-lg font-semibold text-foreground flex items-center gap-2 mb-4">
+                  <Users className="w-5 h-5 text-primary" />
+                  How many travelers?
+                </label>
                 <Input 
-                  type="date" 
+                  type="number" 
+                  value={travelers}
+                  onChange={(e) => setTravelers(parseInt(e.target.value) || 1)}
                   className="h-12 shadow-soft border-border/50 focus:border-primary"
+                  min="1"
+                  max="20"
                 />
+              </div>
+
+              {/* Budget */}
+              <div>
+                <label className="text-lg font-semibold text-foreground flex items-center gap-2 mb-4">
+                  💰 Budget per person
+                </label>
                 <Input 
-                  type="date" 
+                  type="number" 
+                  value={budget}
+                  onChange={(e) => setBudget(parseInt(e.target.value) || 5000)}
                   className="h-12 shadow-soft border-border/50 focus:border-primary"
+                  min="1000"
+                  step="500"
                 />
               </div>
             </div>
 
-            {/* Group Size */}
-            <div className="space-y-4">
-              <label className="text-lg font-semibold text-foreground flex items-center gap-2">
-                <Users className="w-5 h-5 text-primary" />
-                Travelers
-              </label>
-              <Input 
-                type="number" 
-                placeholder="Number of travelers" 
-                className="h-12 shadow-soft border-border/50 focus:border-primary"
-                min="1"
-                defaultValue="1"
-              />
+            {/* Mood Selection */}
+            <div>
+              <h3 className="text-lg font-semibold mb-4 text-foreground">What's your travel mood?</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { mood: 'adventure', label: '🏃‍♂️ Adventure', variant: 'adventure' as const },
+                  { mood: 'relax', label: '🧘‍♀️ Relax', variant: 'ocean' as const },
+                  { mood: 'culture', label: '🏛️ Culture', variant: 'sunset' as const },
+                  { mood: 'nightlife', label: '🌃 Nightlife', variant: 'glass' as const }
+                ].map(({ mood, label, variant }) => (
+                  <Button 
+                    key={mood}
+                    variant={selectedMood === mood ? variant : 'outline'} 
+                    size="sm" 
+                    className="h-12"
+                    onClick={() => handleMoodSelect(mood)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
             </div>
 
-            {/* AI Suggestions Button */}
-            <div className="space-y-4">
-              <label className="text-lg font-semibold text-foreground">
-                Let AI Choose Best Dates
-              </label>
-              <Button variant="hero" size="lg" className="w-full h-12">
-                <Sparkles className="w-5 h-5" />
-                Get AI Suggestions
+            {/* Main CTA */}
+            <div className="text-center">
+              <Button 
+                variant="hero" 
+                size="xl" 
+                className="px-12"
+                onClick={handleCreateTrip}
+                disabled={isLoading || !selectedDestination || !selectedMood}
+              >
+                <Sparkles className="w-6 h-6" />
+                {isLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                    Creating Your Perfect Trip...
+                  </>
+                ) : (
+                  <>
+                    Create My Perfect Trip
+                    <Sparkles className="w-6 h-6" />
+                  </>
+                )}
               </Button>
             </div>
-          </div>
-
-          {/* Mood Selection */}
-          <div className="mt-8">
-            <h3 className="text-lg font-semibold mb-4 text-foreground">What's your travel mood?</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <Button variant="adventure" size="sm" className="h-12">
-                🏃‍♂️ Adventure
-              </Button>
-              <Button variant="ocean" size="sm" className="h-12">
-                🧘‍♀️ Relax
-              </Button>
-              <Button variant="sunset" size="sm" className="h-12">
-                🏛️ Culture
-              </Button>
-              <Button variant="glass" size="sm" className="h-12">
-                🌃 Nightlife
-              </Button>
-            </div>
-          </div>
-
-          {/* Main CTA */}
-          <div className="mt-8 text-center">
-            <Button variant="hero" size="xl" className="px-12">
-              <Sparkles className="w-6 h-6" />
-              Create My Perfect Trip
-              <Sparkles className="w-6 h-6" />
-            </Button>
           </div>
         </Card>
 
